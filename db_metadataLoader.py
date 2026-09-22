@@ -6,8 +6,6 @@ import json
 from datetime import datetime
 from sqlalchemy import create_engine
 import re
-from pythainlp.tokenize import word_tokenize
-from pythainlp.word_vector import WordVector
 
 DB_CONFIG = {
     'host': 'localhost',
