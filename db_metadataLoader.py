@@ -407,7 +407,7 @@ def run_nlp_query(text, connection, schema, sql_engine=None):
 
     try:
         # SQLAlchemy engine ตีความ list ว่าเป็นหลายชุดพารามิเตอร์ (executemany) จึงต้องแปลงเป็น tuple ก่อนเสมอ
-        df = pd.read_sql_query(sql, read_target, params=tuple(params))
+        df = pd.read_sql_query(sql, read_target, params=tuple(params)) # type: ignore
         print(f"ผลลัพธ์: พบ {len(df)} แถว")
         return df
     except Exception as e:
@@ -415,7 +415,7 @@ def run_nlp_query(text, connection, schema, sql_engine=None):
         return None
     
 if __name__ == '__main__':
-    conn, engine = connect()
+    conn, engine = connect() # type: ignore
     DB_SCHEMA = extract_schema(conn)
     
     TABLE_SYNONYMS = build_table_synonyms(DB_SCHEMA)
