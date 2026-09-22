@@ -1,0 +1,52 @@
+services:
+  # ── ฐานข้อมูลหลักของ Lab 8 ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: seminar-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: seminarSQL
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TZ: Asia/Bangkok
+    # เผยพอร์ตออกมาที่ 5433 ของเครื่อง เพื่อไม่ชนกับ PostgreSQL ที่อาจติดตั้งไว้ในเครื่องอยู่แล้ว (ปกติจับ 5432)
+    # ถ้าเครื่องไม่มี PostgreSQL ติดตั้งอยู่ จะแก้กลับเป็น "5432:5432" ก็ได้ (อย่าลืมแก้ DB_PORT ใน application.properties ด้วย)
+    ports:
+      - "5433:5432"
+    volumes:
+      - seminar-pgdata:/var/lib/postgresql/data
+      # รัน mock data (คลังสินค้า 5 ตาราง) อัตโนมัติตอน container สร้างฐานข้อมูลครั้งแรก
+      # หมายเหตุ: สคริปต์ใน docker-entrypoint-initdb.d จะรันแค่ครั้งเดียวตอน data directory ว่างเปล่าเท่านั้น
+      # ถ้าเคยรัน container นี้มาก่อนแล้ว ต้องลบ volume เดิมก่อน (docker compose down -v) ถึงจะรันสคริปต์นี้
+      - ./mock_warehouse_data.sql:/docker-entrypoint-initdb.d/01-mock_warehouse_data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d seminarSQL"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── pgAdmin สำหรับถ่ายภาพหน้าจอตาราง 3 ตาราง + FK ตามที่โจทย์กำหนด ──
+  # เปิด http://localhost:5050  →  login: admin@seminar.com / admin
+  # เซิร์ฟเวอร์ถูกลงทะเบียนไว้ให้แล้วผ่าน pgadmin-servers.json (กรอกแค่รหัสผ่าน postgres ตอนเชื่อมต่อครั้งแรก)
+  pgadmin:
+    image: dpage/pgadmin4:8.12
+    container_name: seminar-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@seminar.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    ports:
+      - "5050:80"
+    volumes:
+      - seminar-pgadmin:/var/lib/pgadmin
+      - ./docker/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  seminar-pgdata:
+  seminar-pgadmin:
