@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "seminarSQL (docker)",
+      "Group": "seminar SQL",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "seminarSQL",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "Comment": "PostgreSQL ของ seminar — รหัสผ่าน postgres"
+    }
+  }
+}
