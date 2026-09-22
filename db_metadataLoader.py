@@ -21,13 +21,21 @@ def get_connection():
     '''สร้างการเชื่อมต่อไปยัง PostgreSQL ด้วยพารามิเตอร์ที่กำหนดใน DB_CONFIG (ใช้กับ psycopg2 โดยตรง เช่น ขั้นตอน schema extraction)'''
     return psycopg2.connect(**DB_CONFIG)
 
+def get_engine():
+    '''สร้าง SQLAlchemy engine จาก DB_CONFIG เดียวกัน (ใช้กับ pd.read_sql_query เพื่อไม่ให้ pandas เตือน
+    ว่า DBAPI2 connection ธรรมดาไม่ใช่ SQLAlchemy connectable)'''
+    url = f"postgresql+psycopg2://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
+    return create_engine(url)
+
 def connect():
     try:
         conn = get_connection()
+        engine = get_engine()
         print('เชื่อมต่อฐานข้อมูลสำเร็จ')
-        return conn
+        return conn, engine
     except Exception as e:
         conn = None
+        engine = None
         print(f'เชื่อมต่อฐานข้อมูลไม่สำเร็จ: {e}')
 
 def extract_schema(connection, schema_name='public'):
@@ -369,10 +377,14 @@ def generate_sql(parsed, schema):
     sql += ';'
     return sql, params, None
 
-def run_nlp_query(text, connection, schema):
+def run_nlp_query(text, connection, schema, sql_engine=None):
     '''
     ขั้นตอนที่ 6: รับคำถามภาษาธรรมชาติ 1 ประโยค แล้วรันผ่านทั้ง pipeline
-    (extract_intent_entities -> generate_sql -> execute)
+    (extract_intent_entities -> generate_sql -> execute) และแสดงผลเป็น DataFrame
+    มีการดักจับ error แบบง่ายๆ เพื่อไม่ให้ notebook หยุดทำงานกลางคัน
+
+    sql_engine: SQLAlchemy engine (ถ้ามี) ใช้กับ pd.read_sql_query แทน psycopg2 connection ตรงๆ
+    เพื่อไม่ให้ pandas เตือนเรื่อง DBAPI2 connection ที่ไม่ใช่ SQLAlchemy connectable
     '''
     parsed = extract_intent_entities(text)
     sql, params, error = generate_sql(parsed, schema)
@@ -387,9 +399,23 @@ def run_nlp_query(text, connection, schema):
     print(f"SQL ที่ generate:\n{sql}")
     if params:
         print(f"พารามิเตอร์: {params}")
+
+    read_target = sql_engine if sql_engine is not None else connection
+    if read_target is None:
+        print('ไม่มีการเชื่อมต่อฐานข้อมูลจริง จึงไม่สามารถรัน query ได้ (แสดงเฉพาะ SQL ที่ generate ด้านบน)')
+        return None
+
+    try:
+        # SQLAlchemy engine ตีความ list ว่าเป็นหลายชุดพารามิเตอร์ (executemany) จึงต้องแปลงเป็น tuple ก่อนเสมอ
+        df = pd.read_sql_query(sql, read_target, params=tuple(params))
+        print(f"ผลลัพธ์: พบ {len(df)} แถว")
+        return df
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาดขณะรัน query: {e}")
+        return None
     
 if __name__ == '__main__':
-    conn = connect()
+    conn, engine = connect()
     DB_SCHEMA = extract_schema(conn)
     
     TABLE_SYNONYMS = build_table_synonyms(DB_SCHEMA)
@@ -410,7 +436,9 @@ if __name__ == '__main__':
 
     for q in demo_questions:
         print('=' * 70)
-        result_df = run_nlp_query(q, conn, DB_SCHEMA)
+        result_df = run_nlp_query(q, conn, DB_SCHEMA, sql_engine=engine)
+        if result_df is not None:
+            print(result_df)
         print()
     
     
